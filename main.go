@@ -7,8 +7,12 @@ import (
 func main() {
 	servmux := http.NewServeMux()
 
-	server := http.Server{Handler: servmux, Addr: ":8080"}
+	server := &http.Server{Handler: servmux, Addr: ":8080"}
 
-	server.ListenAndServe()
+	err := server.ListenAndServe()
+	if err != nil {
+		// It's good to handle errors
+		panic(err)
+	}
 
 }
