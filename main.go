@@ -1,18 +1,23 @@
 package main
 
 import (
+	"log"
 	"net/http"
 )
 
 func main() {
-	servmux := http.NewServeMux()
+	const port = "8081"
 
-	server := &http.Server{Handler: servmux, Addr: ":8080"}
+	mux := http.NewServeMux()
 
-	err := server.ListenAndServe()
-	if err != nil {
-		// It's good to handle errors
-		panic(err)
+	srv := &http.Server{
+		Addr:    "127.0.0.1:" + port,
+		Handler: mux,
 	}
+
+	mux.Handle("/", http.FileServer(http.Dir("./")))
+
+	log.Printf("Serving on port: %s\n", port)
+	log.Fatal(srv.ListenAndServe())
 
 }
