@@ -30,7 +30,11 @@ type validResponse struct {
 */
 
 type chirpResponse struct {
-	CleanedBody string `json:"cleaned_body"`
+	ID         uuid.UUID `json:"id"`
+	Created_at time.Time `json:"created_at"`
+	Updated_at time.Time `json:"updated_at"`
+	Body       string    `json:"body"`
+	User_ID    uuid.UUID `json:"user_id"`
 }
 
 type User struct {
@@ -38,6 +42,11 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+}
+
+type ChirpRequest struct {
+	Body    string `json:"body"`
+	User_ID string `json:"user_id"`
 }
 
 /*
@@ -94,7 +103,7 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 
 	if len(params.Body) <= 140 {
 		respBody := chirpResponse{
-			CleanedBody: removeProfanity(params.Body),
+			Body: removeProfanity(params.Body),
 		}
 
 		respondWithJSON(w, 200, respBody)
