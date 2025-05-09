@@ -86,9 +86,10 @@ func (cfg *apiConfig) resetHits(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserverHits.Swap(0)
 }
 
-func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body    string    `json:"body"`
+		User_ID uuid.UUID `json:"user_id"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -97,16 +98,27 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Error decoding parameters: %s", err)
 		w.WriteHeader(500)
+		return
 	}
 
 	var dat []byte
 
 	if len(params.Body) <= 140 {
+
+		chirp, err := cfg.db_query.SaveChirp(r.Context(), database.SaveChirpParams{Body: params.Body, UserID: params.User_ID})
+		if err != nil {
+			respondWithError(w, 500, err.Error())
+			return
+		}
 		respBody := chirpResponse{
-			Body: removeProfanity(params.Body),
+			ID:         chirp.ID,
+			Created_at: chirp.CreatedAt,
+			Updated_at: chirp.UpdatedAt,
+			Body:       removeProfanity(chirp.Body),
+			User_ID:    chirp.UserID,
 		}
 
-		respondWithJSON(w, 200, respBody)
+		respondWithJSON(w, 201, respBody)
 		return
 	} else {
 		respBody := errorResponse{
@@ -235,8 +247,9 @@ func main() {
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.FileServer(http.Dir("./"))))
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHits)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.writeHits)
-	mux.HandleFunc("POST /api/validate_chirp", apiCfg.validateChirp)
+	mux.HandleFunc("POST /api/chirps", apiCfg.addChirp)
 	mux.HandleFunc("POST /api/users", apiCfg.addUser)
+	mux.HandleFunc("GET /api/chirps", apiCfg.getChirps)
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

@@ -1,6 +1,16 @@
-POST http://127.0.0.1:8081/api/validate_chirp
+POST http://127.0.0.1:8081/api/chirps
 Content-Type: application/json
  
 {
-    "body": "I had something interesting for breakfast"
+    "body": "I had something interesting for breakfast",
+    "user_id": "057f590d-7f24-4b48-a1f7-8c982bf4bdef"
     }
+
+####
+
+POST http://127.0.0.1:8081/api/users
+Content-Type: application/json
+
+{
+    "email": "allan.tucker@gmail.com"
+}
