@@ -166,6 +166,9 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, user)
 }
 
+func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
+}
+
 /*
 Response handling
 */
