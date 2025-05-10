@@ -30,11 +30,11 @@ type validResponse struct {
 */
 
 type chirpResponse struct {
-	ID         uuid.UUID `json:"id"`
-	Created_at time.Time `json:"created_at"`
-	Updated_at time.Time `json:"updated_at"`
-	Body       string    `json:"body"`
-	User_ID    uuid.UUID `json:"user_id"`
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 type User struct {
@@ -111,11 +111,11 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		respBody := chirpResponse{
-			ID:         chirp.ID,
-			Created_at: chirp.CreatedAt,
-			Updated_at: chirp.UpdatedAt,
-			Body:       removeProfanity(chirp.Body),
-			User_ID:    chirp.UserID,
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      removeProfanity(chirp.Body),
+			UserID:    chirp.UserID,
 		}
 
 		respondWithJSON(w, 201, respBody)
@@ -167,6 +167,38 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := cfg.db_query.GetChirps(r.Context())
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+	}
+	responseChirps := []chirpResponse{}
+	for _, dbChirp := range chirps {
+		responseChirps = append(responseChirps, chirpResponse{
+			ID:        dbChirp.ID, // Adjust field names based on your DB struct
+			CreatedAt: dbChirp.CreatedAt,
+			UpdatedAt: dbChirp.UpdatedAt,
+			Body:      dbChirp.Body,
+			UserID:    dbChirp.UserID,
+		})
+	}
+	respondWithJSON(w, 200, responseChirps)
+}
+
+func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
+	chirpID := strings.Split(r.URL.Path, "/api/chirps")
+	chirp, err := cfg.db_query.GetChirp(r.Context(), uuid(chirpID[1]))
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+	}
+	responseChirp := chirpResponse{
+		ID:        dbChirp.ID, // Adjust field names based on your DB struct
+		CreatedAt: dbChirp.CreatedAt,
+		UpdatedAt: dbChirp.UpdatedAt,
+		Body:      dbChirp.Body,
+		UserID:    dbChirp.UserID,
+	}
+
+	respondWithJSON(w, 200, responseChirp)
 }
 
 /*
@@ -253,6 +285,7 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.addChirp)
 	mux.HandleFunc("POST /api/users", apiCfg.addUser)
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirps)
+	mux.HandleFunc("GET /api/chirps/", apiCfg.getChirp)
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
