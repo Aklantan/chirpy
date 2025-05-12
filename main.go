@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/aklantan/chirpy/internal/auth"
 	"github.com/aklantan/chirpy/internal/database"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -141,7 +142,8 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
@@ -151,7 +153,8 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	dbUser, err := cfg.db_query.CreateUser(r.Context(), params.Email)
+	params.Password, _ = auth.HashPassword(params.Password)
+	dbUser, err := cfg.db_query.CreateUser(r.Context(), database.CreateUserParams{Email: params.Email, HashedPassword: params.Password})
 	if err != nil {
 		log.Printf("Error creating user: %s", err)
 		w.WriteHeader(500)
@@ -185,15 +188,20 @@ func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
-	chirpID := strings.Split(r.URL.Path, "/api/chirps")
-<<<<<<< HEAD
-	chirp, err := cfg.db_query.GetChirp(r.Context(), uuid(chirpID[1]))
-=======
-	uuidValue, err := uuid.Parse(chirpID[1])
-	dbchirp, err := cfg.db_query.GetChirp(r.Context(), uuidValue))
->>>>>>> dc818e4 (getChirp)
+	chirpID := r.PathValue("chirpID")
+
+	uuidValue, err := uuid.Parse(chirpID)
 	if err != nil {
-		respondWithError(w, 500, err.Error())
+		respondWithError(w, 400, "Invalid chirp ID format")
+		return
+	}
+
+	dbChirp, err := cfg.db_query.GetChirp(r.Context(), uuidValue)
+	if err != nil {
+		// Here you should check if the error is because the chirp wasn't found
+		// and return 404 in that case, otherwise return 500
+		respondWithError(w, 404, "Chirp not found")
+		return
 	}
 	responseChirp := chirpResponse{
 		ID:        dbChirp.ID, // Adjust field names based on your DB struct
@@ -290,7 +298,7 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.addChirp)
 	mux.HandleFunc("POST /api/users", apiCfg.addUser)
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirps)
-	mux.HandleFunc("GET /api/chirps/", apiCfg.getChirp)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.getChirp)
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
