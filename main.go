@@ -186,7 +186,12 @@ func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
 	chirpID := strings.Split(r.URL.Path, "/api/chirps")
+<<<<<<< HEAD
 	chirp, err := cfg.db_query.GetChirp(r.Context(), uuid(chirpID[1]))
+=======
+	uuidValue, err := uuid.Parse(chirpID[1])
+	dbchirp, err := cfg.db_query.GetChirp(r.Context(), uuidValue))
+>>>>>>> dc818e4 (getChirp)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 	}
