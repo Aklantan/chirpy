@@ -33,3 +33,8 @@ ORDER BY created_at ASC;
 SELECT *
 FROM chirps
 WHERE id = $1;
+
+-- name: GetUser :one
+SELECT *
+FROM users
+WHERE email = $1;

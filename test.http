@@ -12,7 +12,8 @@ POST http://127.0.0.1:8081/api/users
 Content-Type: application/json
 
 {
-    "email": "allan.tucker@gmail.com"
+    "email": "allan.tucker@gmail.com",
+    "password": "ongogabloigian"
 }
 
 ####
@@ -20,3 +21,18 @@ GET http://127.0.0.1:8081/api/chirps
 
 ########
 GET http://127.0.0.1:8081/api/chirps/83856c84-f2cc-4179-9eba-dad99cedd088
+
+
+#########
+
+POST http://127.0.0.1:8081/admin/reset
+
+##########
+
+POST http://127.0.0.1:8081/api/login
+Content-Type: application/json
+
+{
+    "email": "allan.tucker@gmail.com",
+    "password": "ongogabloigian"
+}

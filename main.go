@@ -169,6 +169,40 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, user)
 }
 
+func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	dbUser, err := cfg.db_query.GetUser(r.Context(), params.Email)
+	if err != nil {
+		respondWithError(w, 500, "cannot retrieve user")
+		return
+	}
+	err = auth.CheckPasswordHash(dbUser.HashedPassword, params.Password)
+	if err != nil {
+		respondWithError(w, 401, "incorrect password or email")
+		return
+	}
+
+	user := User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt,
+		Email:     dbUser.Email,
+	}
+	respondWithJSON(w, 200, user)
+}
+
 func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
 	chirps, err := cfg.db_query.GetChirps(r.Context())
 	if err != nil {
@@ -299,6 +333,7 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiCfg.addUser)
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.getChirp)
+	mux.HandleFunc("POST /api/login", apiCfg.loginUser)
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

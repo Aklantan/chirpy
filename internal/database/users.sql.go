@@ -105,6 +105,25 @@ func (q *Queries) GetChirps(ctx context.Context) ([]Chirp, error) {
 	return items, nil
 }
 
+const getUser = `-- name: GetUser :one
+SELECT id, created_at, updated_at, email, hashed_password
+FROM users
+WHERE email = $1
+`
+
+func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUser, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.HashedPassword,
+	)
+	return i, err
+}
+
 const saveChirp = `-- name: SaveChirp :one
 INSERT INTO chirps (id, created_at, updated_at, body, user_id)
 VALUES (
