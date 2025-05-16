@@ -43,6 +43,7 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
 type ChirpRequest struct {
@@ -56,6 +57,7 @@ API state and methods
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db_query       *database.Queries
+	tokenSecret    string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -93,9 +95,20 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		User_ID uuid.UUID `json:"user_id"`
 	}
 
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "No auth token found")
+		return
+	}
+	userID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		respondWithError(w, 401, "incorrect token or user")
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		log.Printf("Error decoding parameters: %s", err)
 		w.WriteHeader(500)
@@ -106,7 +119,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 
 	if len(params.Body) <= 140 {
 
-		chirp, err := cfg.db_query.SaveChirp(r.Context(), database.SaveChirpParams{Body: params.Body, UserID: params.User_ID})
+		chirp, err := cfg.db_query.SaveChirp(r.Context(), database.SaveChirpParams{Body: params.Body, UserID: userID})
 		if err != nil {
 			respondWithError(w, 500, err.Error())
 			return
@@ -171,15 +184,16 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		ExpiresIn *int64 `json:"expires_in_seconds"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		log.Printf("Error decoding parameters: %s", err)
-		w.WriteHeader(500)
+		w.WriteHeader(400)
 		return
 	}
 
@@ -193,12 +207,27 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 401, "incorrect password or email")
 		return
 	}
+	var expiry time.Duration
+	if params.ExpiresIn == nil {
+		expiry = 3600 * time.Second
+	} else {
+		expiry = time.Duration(*params.ExpiresIn) * time.Second
+		if expiry > 3600*time.Second {
+			expiry = 3600 * time.Second
+		}
+	}
+	jwt, err := auth.MakeJWT(dbUser.ID, cfg.tokenSecret, expiry)
+	if err != nil {
+		respondWithError(w, 500, "cannot create token")
+		return
+	}
 
 	user := User{
 		ID:        dbUser.ID,
 		CreatedAt: dbUser.CreatedAt,
 		UpdatedAt: dbUser.UpdatedAt,
 		Email:     dbUser.Email,
+		Token:     jwt,
 	}
 	respondWithJSON(w, 200, user)
 }
@@ -306,6 +335,8 @@ func main() {
 
 	const port = "8081"
 
+	secretString := os.Getenv("TOKEN_STRING")
+
 	dbURL := os.Getenv("DB_URL")
 
 	db, err := sql.Open("postgres", dbURL)
@@ -316,7 +347,8 @@ func main() {
 	dbQueries := database.New(db)
 
 	apiCfg := &apiConfig{
-		db_query: dbQueries,
+		db_query:    dbQueries,
+		tokenSecret: secretString,
 	}
 
 	mux := http.NewServeMux()
