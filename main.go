@@ -44,6 +44,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
 	Token     string    `json:"token"`
+	Refresh   string    `json:"refresh_token"`
 }
 
 type ChirpRequest struct {
@@ -184,9 +185,8 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email     string `json:"email"`
-		Password  string `json:"password"`
-		ExpiresIn *int64 `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
@@ -207,18 +207,17 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 401, "incorrect password or email")
 		return
 	}
-	var expiry time.Duration
-	if params.ExpiresIn == nil {
-		expiry = 3600 * time.Second
-	} else {
-		expiry = time.Duration(*params.ExpiresIn) * time.Second
-		if expiry > 3600*time.Second {
-			expiry = 3600 * time.Second
-		}
-	}
+
+	expiry := 3600 * time.Second
+
 	jwt, err := auth.MakeJWT(dbUser.ID, cfg.tokenSecret, expiry)
 	if err != nil {
-		respondWithError(w, 500, "cannot create token")
+		respondWithError(w, 500, "cannot create JWT token")
+		return
+	}
+	refresh, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(w, 500, "cannot create refresh token")
 		return
 	}
 
@@ -228,6 +227,7 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt: dbUser.UpdatedAt,
 		Email:     dbUser.Email,
 		Token:     jwt,
+		Refresh:   refresh,
 	}
 	respondWithJSON(w, 200, user)
 }
