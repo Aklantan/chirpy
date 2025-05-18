@@ -92,8 +92,7 @@ func (cfg *apiConfig) resetHits(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body    string    `json:"body"`
-		User_ID uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	token, err := auth.GetBearerToken(r.Header)
@@ -208,9 +207,10 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiry := 3600 * time.Second
+	jwtExpiry := 3600 * time.Second
+	refreshExpiry := 1440 * time.Hour
 
-	jwt, err := auth.MakeJWT(dbUser.ID, cfg.tokenSecret, expiry)
+	jwt, err := auth.MakeJWT(dbUser.ID, cfg.tokenSecret, jwtExpiry)
 	if err != nil {
 		respondWithError(w, 500, "cannot create JWT token")
 		return
@@ -220,6 +220,8 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 500, "cannot create refresh token")
 		return
 	}
+
+	cfg.db_query.AddRefreshToken(r.Context(), database.AddRefreshTokenParams{Token: refresh, UserID: dbUser.ID, ExpiresAt: time.Now().Add(refreshExpiry)})
 
 	user := User{
 		ID:        dbUser.ID,
@@ -275,6 +277,117 @@ func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, 200, responseChirp)
+}
+
+func (cfg *apiConfig) refreshUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Token string `json:"token"`
+	}
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "no token found")
+		return
+	}
+	userToBeRefreshed, err := cfg.db_query.GetUserFromRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		respondWithError(w, 401, "no user found for token")
+		return
+	}
+	jwt, err := auth.MakeJWT(userToBeRefreshed, cfg.tokenSecret, 3600*time.Second)
+	if err != nil {
+		respondWithError(w, 500, "cannot create new JWT")
+		return
+	}
+	user := parameters{
+		Token: jwt,
+	}
+	respondWithJSON(w, 200, user)
+
+}
+
+func (cfg *apiConfig) revokeUser(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "no token found")
+		return
+	}
+	cfg.db_query.RevokeUserRefreshToken(r.Context(), refreshToken)
+	respondWithJSON(w, 204, nil)
+}
+
+func (cfg *apiConfig) updateEmailandPassword(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(400)
+		return
+	}
+	accessToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "no token found")
+		return
+	}
+	jwtUser, err := auth.ValidateJWT(accessToken, cfg.tokenSecret)
+	if err != nil {
+		respondWithError(w, 401, "no userfound")
+		return
+	}
+	hashed_password, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, 500, "cannot hash password")
+		return
+	}
+	user, err := cfg.db_query.UpdateEmailandPassword(r.Context(), database.UpdateEmailandPasswordParams{Email: params.Email, HashedPassword: hashed_password, ID: jwtUser})
+	if err != nil {
+		respondWithError(w, 401, "cannot update email or password")
+		return
+	}
+	userResponse := User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+	respondWithJSON(w, 200, userResponse)
+
+}
+
+func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	chirp, err := cfg.db_query.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		respondWithError(w, 404, "chirp not found")
+		return
+	}
+
+	accessToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "no token found")
+		return
+	}
+	jwtUser, err := auth.ValidateJWT(accessToken, cfg.tokenSecret)
+	if err != nil {
+		respondWithError(w, 401, "no userfound")
+		return
+	}
+	if chirp.UserID != jwtUser {
+		respondWithError(w, 403, "user not authorised")
+		return
+	}
+	err = cfg.db_query.DeleteChirp(r.Context(), chirp.ID)
+	if err != nil {
+		respondWithError(w, 500, "cannot delete tweet")
+		return
+	}
+	respondWithJSON(w, 204, nil)
+	return
+
 }
 
 /*
@@ -366,6 +479,10 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.getChirp)
 	mux.HandleFunc("POST /api/login", apiCfg.loginUser)
+	mux.HandleFunc("POST /api/refresh", apiCfg.refreshUser)
+	mux.HandleFunc("POST /api/revoke", apiCfg.revokeUser)
+	mux.HandleFunc("PUT /api/users", apiCfg.updateEmailandPassword)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.deleteChirp)
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

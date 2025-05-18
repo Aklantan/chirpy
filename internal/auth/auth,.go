@@ -63,6 +63,10 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	if !token.Valid {
 		return uuid.Nil, fmt.Errorf("invalid token")
 	}
+	//expired := claims.ExpiresAt
+	//if expired < time.Now() {
+	//	return uuid.Nil, fmt.Errorf("expired token")
+	//}
 	userID := claims.Subject
 	if err != nil {
 		fmt.Printf("%v : incorrect token\n", err)
